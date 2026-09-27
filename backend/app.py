@@ -4,7 +4,6 @@ from flask_cors import CORS
 import os
 import base64
 import cv2
-import numpy as np
 import tensorflow as tf
 
 from prediction import predict_image, model
@@ -20,7 +19,17 @@ from gradcam import (
 # ==========================================
 
 app = Flask(__name__)
-CORS(app)
+
+CORS(
+    app,
+    resources={
+        r"/*": {
+            "origins": [
+                "https://plant-disease-detection-xai.vercel.app"
+            ]
+        }
+    }
+)
 
 
 # ==========================================
@@ -166,6 +175,7 @@ def predict():
             )
 
             if not success:
+
                 raise ValueError(
                     "Unable to encode image."
                 )
