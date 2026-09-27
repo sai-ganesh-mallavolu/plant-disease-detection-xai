@@ -5,6 +5,7 @@ import os
 import base64
 import cv2
 import tensorflow as tf
+import time
 
 from prediction import predict_image, model
 from gradcam import (
@@ -14,11 +15,8 @@ from gradcam import (
 )
 
 
-# ==========================================
-# Flask Application
-# ==========================================
-
 app = Flask(__name__)
+
 
 CORS(
     app,
@@ -32,11 +30,8 @@ CORS(
 )
 
 
-# ==========================================
-# Grad-CAM Components
-# ==========================================
-
 print("Creating Grad-CAM components...")
+
 
 (
     gradcam_base,
@@ -45,12 +40,9 @@ print("Creating Grad-CAM components...")
     final_layer
 ) = create_gradcam_components(model)
 
+
 print("Grad-CAM components created successfully!")
 
-
-# ==========================================
-# Home Route
-# ==========================================
 
 @app.route("/", methods=["GET"])
 def home():
@@ -60,15 +52,15 @@ def home():
     })
 
 
-# ==========================================
-# Prediction + Grad-CAM API
-# ==========================================
-
-@app.route(
-    "/predict",
-    methods=["POST"]
-)
+@app.route("/predict", methods=["POST"])
 def predict():
+
+    request_start = time.time()
+
+    print("\n==============================")
+    print("PREDICTION REQUEST STARTED")
+    print("==============================")
+
 
     if "image" not in request.files:
 
@@ -76,13 +68,16 @@ def predict():
             "error": "No image uploaded."
         }), 400
 
+
     image = request.files["image"]
+
 
     if image.filename == "":
 
         return jsonify({
             "error": "No image selected."
         }), 400
+
 
     temp_path = os.path.join(
         os.path.dirname(
@@ -91,40 +86,71 @@ def predict():
         "temp_gradcam_image"
     )
 
+
     try:
 
-        # ----------------------------------
-        # Save uploaded image
-        # ----------------------------------
+        # ==============================
+        # STEP 1 — SAVE IMAGE
+        # ==============================
+
+        start = time.time()
 
         image.save(temp_path)
 
+        print(
+            f"1. Image save time: "
+            f"{time.time() - start:.2f} seconds"
+        )
 
-        # ----------------------------------
-        # Prediction
-        # ----------------------------------
+
+        # ==============================
+        # STEP 2 — PREDICTION
+        # ==============================
+
+        start = time.time()
 
         result = predict_image(
             temp_path
         )
+
+        print(
+            f"2. Prediction time: "
+            f"{time.time() - start:.2f} seconds"
+        )
+
 
         predicted_index = result[
             "predicted_index"
         ]
 
 
-        # ----------------------------------
-        # Prepare image for Grad-CAM
-        # ----------------------------------
+        print(
+            "Predicted class:",
+            result["predicted_class"]
+        )
+
+        print(
+            "Confidence:",
+            result["confidence"]
+        )
+
+
+        # ==============================
+        # STEP 3 — LOAD IMAGE
+        # ==============================
+
+        start = time.time()
 
         img = tf.keras.utils.load_img(
             temp_path,
             target_size=(224, 224)
         )
 
+
         img_array = tf.keras.utils.img_to_array(
             img
         )
+
 
         img_batch = tf.expand_dims(
             img_array,
@@ -132,9 +158,19 @@ def predict():
         )
 
 
-        # ----------------------------------
-        # Generate Grad-CAM
-        # ----------------------------------
+        print(
+            f"3. Image loading/preparation time: "
+            f"{time.time() - start:.2f} seconds"
+        )
+
+
+        # ==============================
+        # STEP 4 — GRAD-CAM
+        # ==============================
+
+        start = time.time()
+
+        print("Starting Grad-CAM...")
 
         heatmap = generate_gradcam(
             img_batch,
@@ -145,10 +181,17 @@ def predict():
             final_layer
         )
 
+        print(
+            f"4. Grad-CAM time: "
+            f"{time.time() - start:.2f} seconds"
+        )
 
-        # ----------------------------------
-        # Create Grad-CAM overlay
-        # ----------------------------------
+
+        # ==============================
+        # STEP 5 — CREATE OVERLAY
+        # ==============================
+
+        start = time.time()
 
         (
             original,
@@ -159,10 +202,18 @@ def predict():
             heatmap
         )
 
+        print(
+            f"5. Overlay creation time: "
+            f"{time.time() - start:.2f} seconds"
+        )
 
-        # ----------------------------------
-        # Convert images to Base64
-        # ----------------------------------
+
+        # ==============================
+        # STEP 6 — BASE64 ENCODING
+        # ==============================
+
+        start = time.time()
+
 
         def image_to_base64(array):
 
@@ -174,11 +225,13 @@ def predict():
                 )
             )
 
+
             if not success:
 
                 raise ValueError(
                     "Unable to encode image."
                 )
+
 
             return base64.b64encode(
                 buffer
@@ -189,18 +242,46 @@ def predict():
             original
         )
 
+
         heatmap_base64 = image_to_base64(
             heatmap_resized
         )
+
 
         overlay_base64 = image_to_base64(
             superimposed
         )
 
 
-        # ----------------------------------
-        # Final Response
-        # ----------------------------------
+        print(
+            f"6. Base64 encoding time: "
+            f"{time.time() - start:.2f} seconds"
+        )
+
+
+        # ==============================
+        # STEP 7 — TOTAL TIME
+        # ==============================
+
+        total_time = (
+            time.time() - request_start
+        )
+
+
+        print(
+            f"7. TOTAL REQUEST TIME: "
+            f"{total_time:.2f} seconds"
+        )
+
+
+        print("==============================")
+        print("PREDICTION REQUEST COMPLETED")
+        print("==============================\n")
+
+
+        # ==============================
+        # RESPONSE
+        # ==============================
 
         return jsonify({
 
@@ -223,7 +304,17 @@ def predict():
 
     except Exception as e:
 
-        print("Prediction error:", e)
+        print(
+            "Prediction error:",
+            str(e)
+        )
+
+
+        print(
+            f"Request failed after: "
+            f"{time.time() - request_start:.2f} seconds"
+        )
+
 
         return jsonify({
             "error": str(e)
@@ -232,17 +323,10 @@ def predict():
 
     finally:
 
-        # Remove temporary file
         if os.path.exists(temp_path):
 
-            os.remove(
-                temp_path
-            )
+            os.remove(temp_path)
 
-
-# ==========================================
-# Run Application
-# ==========================================
 
 if __name__ == "__main__":
 
