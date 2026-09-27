@@ -99,7 +99,7 @@ predictButton.addEventListener("click", async function () {
     try {
 
         const response = await fetch(
-            "http://127.0.0.1:5000/predict",
+            "https://plant-disease-detection-xai.onrender.com/predict",
             {
                 method: "POST",
                 body: formData
