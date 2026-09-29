@@ -1,6 +1,14 @@
 import os
 import json
 import numpy as np
+
+
+# Limit TensorFlow CPU resources for Render
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+
+
 import tensorflow as tf
 
 
